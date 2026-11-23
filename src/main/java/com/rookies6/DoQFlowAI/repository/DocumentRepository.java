@@ -23,6 +23,9 @@ import org.springframework.data.repository.query.Param;
  */
 public interface DocumentRepository extends JpaRepository<Document, Long> {
 
+	/** 팀장 관리 화면: 본인이 등록한 문서만 조회한다. */
+	Page<Document> findByUploadedById(Long userId, Pageable pageable);
+
 	/**
 	 * [API-08 D-2] 문서 목록 — 읽을 수 있는 문서만 페이징 조회
 	 *
