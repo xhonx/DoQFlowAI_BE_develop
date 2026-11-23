@@ -46,6 +46,7 @@ public class AuthService {
 	private final LoginAttemptService loginAttempt;
 	private final AuditService audit;
 	private final long refreshExpirationMillis;
+	private final SignupKeyPolicy signupKeyPolicy;
 
 	public AuthService(AppUserRepository users,
 					   RefreshTokenRepository tokens,
@@ -53,7 +54,8 @@ public class AuthService {
 					   JwtProvider jwtProvider,
 					   LoginAttemptService loginAttempt,
 					   AuditService audit,
-					   @Value("${jwt.refresh-expiration}") long refreshExpirationMillis) {
+					   @Value("${jwt.refresh-expiration}") long refreshExpirationMillis,
+					   SignupKeyPolicy signupKeyPolicy) {
 		this.users = users;
 		this.tokens = tokens;
 		this.passwordEncoder = passwordEncoder;
@@ -61,15 +63,17 @@ public class AuthService {
 		this.loginAttempt = loginAttempt;
 		this.audit = audit;
 		this.refreshExpirationMillis = refreshExpirationMillis;
+		this.signupKeyPolicy = signupKeyPolicy;
 	}
 
 	/**
 	 * 회원가입 < API 4.1 >
 	 *
-	 * <p>signupKey는 검증하지 않는다 (SEC-B 재현). 추후 작업 예정
+	 * <p>팀장 가입은 서버의 가입 키 검증을 먼저 통과해야 한다.
 	 */
 	@Transactional
 	public SignupResponse signup(SignupRequest req) {
+		signupKeyPolicy.validate(req.rankLevel(), req.signupKey());
 		if (users.existsByEmail(req.email())) {
 			throw new EmailDuplicatedException("email=" + req.email());
 		}

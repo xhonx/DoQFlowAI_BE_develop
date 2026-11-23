@@ -11,6 +11,7 @@ package com.rookies6.DoQFlowAI.exception;
 public enum ErrorCode {
 
 	VALIDATION_ERROR(400, "입력값이 올바르지 않습니다."),
+	INVALID_SIGNUP_KEY(400, "팀장 가입 키를 확인해 주세요."),
 	UNAUTHORIZED(401, "인증이 필요합니다."),
 	INVALID_CREDENTIALS(401, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	FORBIDDEN(403, "권한이 없습니다."),
