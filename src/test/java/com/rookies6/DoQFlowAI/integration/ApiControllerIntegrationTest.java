@@ -30,6 +30,8 @@ import com.rookies6.DoQFlowAI.repository.DocumentVersionRepository;
 import com.rookies6.DoQFlowAI.security.JwtProvider;
 import com.rookies6.DoQFlowAI.service.AiClientService;
 import com.rookies6.DoQFlowAI.service.ChatService;
+import com.rookies6.DoQFlowAI.service.UrlFetchClient;
+import java.net.URI;
 import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -85,10 +87,15 @@ class ApiControllerIntegrationTest {
 		// 테스트 전용 값. 실제 비밀값을 쓰지 않는다
 		registry.add("jwt.secret", () -> "integration-test-secret-integration-test-secret");
 		registry.add("ai.internal-key", () -> "integration-test-key");
+		registry.add("URL_IMPORT_ALLOWED_HOSTS", () -> "files.example.com");
+		registry.add("app.signup.lead-key", () -> "integration-lead-key");
 	}
 
 	@MockitoBean
 	AiClientService ai;
+
+	@MockitoBean
+	UrlFetchClient urlFetch;
 
 	@Autowired MockMvc mvc;
 	@Autowired JwtProvider jwt;
@@ -104,7 +111,7 @@ class ApiControllerIntegrationTest {
 
 	@BeforeEach
 	void setUp() {
-		reset(ai);
+		reset(ai, urlFetch);
 		when(ai.history(anyLong(), anyList())).thenAnswer(invocation -> {
 			List<AiHistory.RequestSegment> segments = invocation.getArgument(1);
 			return new AiHistory.Response(segments.stream()
@@ -169,6 +176,63 @@ class ApiControllerIntegrationTest {
 		var response = mvc.perform(get(url).param("file", "../other.txt")
 				.header(HttpHeaders.AUTHORIZATION, leadToken)).andExpect(status().isOk()).andReturn().getResponse();
 		assertThat(response.getContentAsByteArray()).isEqualTo(expected);
+	}
+
+	@Test
+	@DisplayName("URL 가져오기는 권한과 기존 파일 검증을 거쳐 저장하고 실패하면 버전을 만들지 않는다")
+	void importsUrlUsingExistingPipeline() throws Exception {
+		URI uri = URI.create("https://files.example.com/report.txt");
+		when(urlFetch.fetch(uri)).thenReturn("외부 문서 원본".getBytes(StandardCharsets.UTF_8));
+		String path = "/documents/" + documentId + "/versions/from-url";
+		String body = "{\"url\":\"" + uri + "\"}";
+		mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isUnauthorized());
+		mvc.perform(post(path).header(HttpHeaders.AUTHORIZATION, invitedToken)
+				.contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+		verify(urlFetch, never()).fetch(org.mockito.ArgumentMatchers.any());
+		mvc.perform(post(path).header(HttpHeaders.AUTHORIZATION, leadToken)
+				.contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
+		assertThat(versions.findByDocumentIdOrderByVersionNo(documentId)).hasSize(1);
+		mvc.perform(post(path).header(HttpHeaders.AUTHORIZATION, leadToken)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"url\":\"https://127.0.0.1/a.txt\"}"))
+				.andExpect(status().isBadRequest());
+		assertThat(versions.findByDocumentIdOrderByVersionNo(documentId)).hasSize(1);
+		mvc.perform(get("/help").param("page", "guide").header(HttpHeaders.AUTHORIZATION, leadToken))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.title").value("사용 안내"));
+		mvc.perform(get("/help").param("page", "../application.yaml").header(HttpHeaders.AUTHORIZATION, leadToken))
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
+	@DisplayName("팀장 가입은 가입 키가 일치해야 하며 사원 가입은 키 없이 가능하다")
+	void leadSignupValidatesServerKey() throws Exception {
+		String email = "signup-" + UUID.randomUUID() + "@example.com";
+		String prefix = "{\"email\":\"" + email + "\",\"password\":\"Passw0rd!2026\",\"name\":\"팀장\",\"rankLevel\":2";
+		for (String suffix : List.of("}", ",\"signupKey\":\"wrong\"}")) {
+			mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON).content(prefix + suffix))
+					.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("INVALID_SIGNUP_KEY"));
+		}
+		mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+				.content(prefix + ",\"signupKey\":\"integration-lead-key\"}"))
+				.andExpect(status().isCreated());
+	}
+
+	@Test
+	@DisplayName("팀장 관리 API는 사원 직접 호출을 거절하고 등록자 본인의 문서만 노출한다")
+	void managementRequiresLeadAndFiltersOwnership() throws Exception {
+		mvc.perform(get("/management/documents")).andExpect(status().isUnauthorized());
+		mvc.perform(get("/management/documents").header(HttpHeaders.AUTHORIZATION, invitedToken))
+				.andExpect(status().isForbidden());
+		AppUser otherLead = tx.execute(status -> {
+			AppUser other = user("other-lead-" + UUID.randomUUID(), 2);
+			em.persist(Document.builder().name("다른 팀장의 문서").uploadedBy(other).build());
+			return other;
+		});
+		mvc.perform(get("/management/documents").header(HttpHeaders.AUTHORIZATION, leadToken))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
+				.andExpect(jsonPath("$.data.content[0].documentId").value(documentId));
+		mvc.perform(get("/documents/{id}", documentId).header(HttpHeaders.AUTHORIZATION, bearer(otherLead)))
+				.andExpect(status().isNotFound());
 	}
 
 	private static MockMultipartFile text(String name, String content) {
