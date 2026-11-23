@@ -1,80 +1,39 @@
 package com.rookies6.DoQFlowAI.lab;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
-/**
- * 취약점 토글 (인시큐어 코딩 실습용) < Final PJT >
- *
- * <p>각 취약 분기는 {@code if (vulnToggle.on("x-y")) { ...취약... } else { ...안전... }} 로 감싼다.
- * 안전 코드와 취약 코드가 둘 다 코드에 남고, 런타임에 전환된다.
- *
- * <p><b>lab 프로필에서만 동작한다.</b> app.lab.enabled=true(application-lab.yaml)일 때만
- * 플래그를 읽고, 그 외(기본·prod)에서는 항상 false를 돌려준다. 즉 배포본은 전환 불가·안전 고정이다.
- *
- * <p>상태는 vuln_flags 테이블에 저장하고 메모리에 캐시한다.
- */
+/** 시작 시 환경변수를 읽는 실습 설정. DB·변경 API·런타임 캐시를 사용하지 않는다. */
 @Component
 public class VulnToggle {
 
-	private final boolean labEnabled;
-	private final JdbcTemplate jdbc;
-	private final Map<String, Boolean> cache = new ConcurrentHashMap<>();
-	private volatile boolean loaded = false;
+	private static final Set<String> KNOWN = Set.of(
+			"1-1", "1-2", "1-3", "1-4", "1-5", "2-1", "2-2",
+			"3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
+			"4-1", "4-2", "4-3", "4-4", "4-5", "5-1", "5-2",
+			"6-1", "6-2", "7-1", "7-2", "7-3", "7-4", "8-1");
+	private final Set<String> enabled;
 
-	public VulnToggle(@Value("${app.lab.enabled:false}") boolean labEnabled, JdbcTemplate jdbc) {
-		this.labEnabled = labEnabled;
-		this.jdbc = jdbc;
+	public VulnToggle(Environment environment) {
+		// lab을 명시해야 하며 prod/production이 함께 켜져 있으면 무조건 off.
+		if (!environment.acceptsProfiles(Profiles.of("lab & !prod & !production"))) {
+			this.enabled = Set.of();
+			return;
+		}
+		Set<String> requested = Arrays.stream(environment.getProperty("LAB_VULNS", "").split(","))
+				.map(String::trim).filter(id -> !id.isEmpty()).collect(Collectors.toSet());
+		if (!KNOWN.containsAll(requested)) {
+			throw new IllegalArgumentException("LAB_VULNS contains an unsupported guideline ID");
+		}
+		this.enabled = Set.copyOf(requested);
 	}
 
-	/** 취약 분기를 켤지 여부. prod(labEnabled=false)에서는 무조건 false */
+	/** 설정 변경은 프로세스/컨테이너를 다시 시작한 뒤 적용된다. */
 	public boolean on(String flagId) {
-		if (!labEnabled) {
-			return false;
-		}
-		ensureLoaded();
-		return Boolean.TRUE.equals(cache.get(flagId));
-	}
-
-	/** 플래그 전체 상태 (컨트롤 페이지용) */
-	public Map<String, Boolean> all() {
-		if (!labEnabled) {
-			return Map.of();
-		}
-		ensureLoaded();
-		return Map.copyOf(cache);
-	}
-
-	/** 플래그 on/off. lab에서만 반영된다 */
-	public void set(String flagId, boolean enabled) {
-		if (!labEnabled) {
-			return;
-		}
-		ensureLoaded();
-		int updated = jdbc.update(
-				"UPDATE vuln_flags SET enabled = ?, updated_at = ? WHERE flag_id = ?",
-				enabled, LocalDateTime.now(), flagId);
-		if (updated > 0) {
-			cache.put(flagId, enabled);
-		}
-	}
-
-	/** 최초 접근 시 1회 로드. Flyway 마이그레이션 이후 시점이라 테이블이 보장된다 */
-	private void ensureLoaded() {
-		if (loaded) {
-			return;
-		}
-		synchronized (this) {
-			if (loaded) {
-				return;
-			}
-			jdbc.query("SELECT flag_id, enabled FROM vuln_flags",
-					rs -> cache.put(rs.getString("flag_id"), rs.getBoolean("enabled")));
-			loaded = true;
-		}
+		return flagId != null && enabled.contains(flagId);
 	}
 }
