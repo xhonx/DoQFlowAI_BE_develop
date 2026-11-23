@@ -58,7 +58,7 @@ public class VersionController {
 		return ApiResponse.ok(versionService.get(me, documentId, versionNo));
 	}
 
-	/** 원문 보기 < API 23 > — DB의 content_text만 돌려준다. 파일 다운로드는 없다 */
+	/** 원문 보기 < API 23 > — DB의 content_text만 돌려준다. 파일 다운로드는 별도 FileDownloadController가 담당한다 */
 	@GetMapping("/{versionNo}/content")
 	public ApiResponse<VersionContentResponse> content(@CurrentUser AppUser me, @PathVariable Long documentId,
 			@PathVariable int versionNo) {

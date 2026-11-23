@@ -1,0 +1,4 @@
+# 로컬 실습 전용. SPRING_PROFILES_ACTIVE=lab 으로 명시해서 사용한다.
+# LAB_VULNS는 VulnToggle이 시작할 때 읽는다. 빈 값이면 모든 항목 off.
+# 환경변수 변경 후 프로세스/컨테이너 재생성 필요. 운영 산출물 제외와는 별도다.
+{}

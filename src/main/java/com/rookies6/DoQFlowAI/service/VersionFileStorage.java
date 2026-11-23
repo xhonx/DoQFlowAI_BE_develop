@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 /** 업로드한 버전 원본 파일의 저장과 삭제 < API 11, API 18 >
  *
  * 저장 경로는 {@code {upload-dir}/{documentId}/{versionNo}/{UUID}.{ext}}이다.
- * 사용자가 보낸 파일명은 경로에 쓰지 않고, 응답에도 경로를 넣지 않는다. 원문 다운로드 API는 없다.
+ * 사용자가 보낸 파일명은 경로에 쓰지 않고, 응답에도 경로를 넣지 않는다. 원본 다운로드는 FileDownloadService가 같은 저장 구조를 읽는다.
  */
 @Component
 public class VersionFileStorage {

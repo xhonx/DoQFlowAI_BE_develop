@@ -12,9 +12,8 @@ import jakarta.validation.constraints.Size;
  *
  * <p>rankLevel을 요청에서 받는다. 사원(1)·팀장(2) 2단계다.
  *
- * <p>signupKey는 받기만 하고 <b>서버에서 검증하지 않는다.</b> ==> 키는 환경변수에 넣을 예정이며 추후 작업 예정
- * API를 직접 호출하면 키 없이도 팀장으로 가입할 수 있고, 그 상태가 보안점검서의
- * "조치 전" 근거다. Day 5에 이슈 I에서 키 대조를 넣는다. 지금 넣으면 증적이 사라진다.
+ * <p>팀장 가입 키는 AuthService의 SignupKeyPolicy가 서버에서 검증한다.
+ * 별도 ADMIN 역할은 없으며 사원(1)·팀장(2) 체계를 유지한다.
  */
 public record SignupRequest(
 
@@ -39,7 +38,7 @@ public record SignupRequest(
 		@Max(2)
 		int rankLevel,
 
-		/** 화면에서는 rankLevel=2일 때 필수. 서버는 검증하지 않는다 (SEC-B) */
+		/** rankLevel=2일 때 필수. 서버에서 설정값과 대조한다 */
 		String signupKey
 ) {
 }

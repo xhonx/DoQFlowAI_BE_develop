@@ -11,6 +11,7 @@ package com.rookies6.DoQFlowAI.exception;
 public enum ErrorCode {
 
 	VALIDATION_ERROR(400, "입력값이 올바르지 않습니다."),
+	INVALID_SIGNUP_KEY(400, "팀장 가입 키를 확인해 주세요."),
 	UNAUTHORIZED(401, "인증이 필요합니다."),
 	INVALID_CREDENTIALS(401, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	FORBIDDEN(403, "권한이 없습니다."),
@@ -22,6 +23,7 @@ public enum ErrorCode {
 	ACCOUNT_LOCKED(423, "계정이 잠겼습니다. 잠시 후 다시 시도하세요."),
 	RATE_LIMIT_EXCEEDED(429, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 	INTERNAL_ERROR(500, "일시적인 오류가 발생했습니다."),
+	URL_IMPORT_FAILED(502, "외부 문서를 가져올 수 없습니다. URL과 허용 출처를 확인해 주세요."),
 	AI_UNAVAILABLE(502, "일시적으로 답변할 수 없습니다.");
 
 	private final int status;
