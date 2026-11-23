@@ -144,6 +144,33 @@ class ApiControllerIntegrationTest {
 		return "Bearer " + jwt.createAccessToken(user.getPublicId());
 	}
 
+	@Test
+	@DisplayName("원본 다운로드는 등록자와 수락한 열람자만 허용하고 바이너리/첨부 헤더를 보존한다")
+	void downloadsOriginalWithDocumentAcl() throws Exception {
+		uploadTwoVersionsAndWait();
+		byte[] expected = "1. 목적\n결재는 팀장이 승인한다.\n끝".getBytes(StandardCharsets.UTF_8);
+		String url = "/documents/" + documentId + "/versions/1/download";
+		for (String token : List.of(leadToken, invitedToken)) {
+			var response = mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, token))
+					.andExpect(status().isOk()).andReturn().getResponse();
+			assertThat(response.getContentAsByteArray()).isEqualTo(expected);
+			assertThat(response.getContentType()).isEqualTo("application/octet-stream");
+			assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).startsWith("attachment;");
+			assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).contains("no-store");
+			assertThat(response.getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+		}
+		mvc.perform(get(url)).andExpect(status().isUnauthorized());
+		mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, outsiderToken))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("DOCUMENT_NOT_FOUND"));
+		mvc.perform(get("/documents/{id}/versions/999/download", documentId)
+				.header(HttpHeaders.AUTHORIZATION, leadToken))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("DOCUMENT_NOT_FOUND"));
+		// 클라이언트의 file 파라미터는 저장 경로 선택에 사용하지 않는다.
+		var response = mvc.perform(get(url).param("file", "../other.txt")
+				.header(HttpHeaders.AUTHORIZATION, leadToken)).andExpect(status().isOk()).andReturn().getResponse();
+		assertThat(response.getContentAsByteArray()).isEqualTo(expected);
+	}
+
 	private static MockMultipartFile text(String name, String content) {
 		return new MockMultipartFile("files", name, "text/plain", content.getBytes(StandardCharsets.UTF_8));
 	}
