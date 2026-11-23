@@ -1,0 +1,5 @@
+# 인시큐어 코딩 실습(lab) 전용 설정. 배포(prod)에서는 이 프로필을 활성화하지 않는다.
+# 활성화: SPRING_PROFILES_ACTIVE=lab (또는 --spring.profiles.active=lab)
+app:
+  lab:
+    enabled: true
